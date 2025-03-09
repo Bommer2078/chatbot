@@ -1,0 +1,236 @@
+@import './variables.scss';
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: $text-primary;
+  background-color: $background-color-base;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 $spacing-base;
+}
+
+// Flex 布局工具类
+.flex {
+  display: flex;
+  
+  &-column {
+    flex-direction: column;
+  }
+  
+  &-1 {
+    flex: 1;
+  }
+}
+
+.justify {
+  &-between {
+    justify-content: space-between;
+  }
+  
+  &-center {
+    justify-content: center;
+  }
+  
+  &-end {
+    justify-content: flex-end;
+  }
+}
+
+.items {
+  &-center {
+    align-items: center;
+  }
+  
+  &-start {
+    align-items: flex-start;
+  }
+  
+  &-end {
+    align-items: flex-end;
+  }
+}
+
+.text {
+  &-center {
+    text-align: center;
+  }
+  
+  &-left {
+    text-align: left;
+  }
+  
+  &-right {
+    text-align: right;
+  }
+}
+
+// 边框圆角
+.rounded {
+  border-radius: $border-radius-base;
+  
+  &-lg {
+    border-radius: $border-radius-large;
+  }
+  
+  &-sm {
+    border-radius: $border-radius-small;
+  }
+  
+  &-circle {
+    border-radius: $border-radius-circle;
+  }
+}
+
+// 阴影
+.shadow {
+  box-shadow: $box-shadow-light;
+  
+  &-base {
+    box-shadow: $box-shadow-base;
+  }
+}
+
+// 背景颜色
+.bg {
+  &-white {
+    background-color: $background-color-white;
+  }
+  
+  &-light {
+    background-color: $background-color-light;
+  }
+  
+  &-primary {
+    background-color: $primary-color;
+    color: white;
+  }
+}
+
+// 间距工具类
+.p {
+  &-5 {
+    padding: $spacing-extra-small;
+  }
+  
+  &-10 {
+    padding: $spacing-small;
+  }
+  
+  &-15 {
+    padding: $spacing-base;
+  }
+  
+  &-20 {
+    padding: $spacing-large;
+  }
+  
+  &-30 {
+    padding: $spacing-extra-large;
+  }
+}
+
+.m {
+  &-5 {
+    margin: $spacing-extra-small;
+  }
+  
+  &-10 {
+    margin: $spacing-small;
+  }
+  
+  &-15 {
+    margin: $spacing-base;
+  }
+  
+  &-20 {
+    margin: $spacing-large;
+  }
+  
+  &-30 {
+    margin: $spacing-extra-large;
+  }
+}
+
+// 方向性间距
+.mt {
+  &-5 {
+    margin-top: $spacing-extra-small;
+  }
+  
+  &-10 {
+    margin-top: $spacing-small;
+  }
+  
+  &-15 {
+    margin-top: $spacing-base;
+  }
+  
+  &-20 {
+    margin-top: $spacing-large;
+  }
+}
+
+.mb {
+  &-5 {
+    margin-bottom: $spacing-extra-small;
+  }
+  
+  &-10 {
+    margin-bottom: $spacing-small;
+  }
+  
+  &-15 {
+    margin-bottom: $spacing-base;
+  }
+  
+  &-20 {
+    margin-bottom: $spacing-large;
+  }
+}
+
+.ml {
+  &-5 {
+    margin-left: $spacing-extra-small;
+  }
+  
+  &-10 {
+    margin-left: $spacing-small;
+  }
+  
+  &-15 {
+    margin-left: $spacing-base;
+  }
+  
+  &-20 {
+    margin-left: $spacing-large;
+  }
+}
+
+.mr {
+  &-5 {
+    margin-right: $spacing-extra-small;
+  }
+  
+  &-10 {
+    margin-right: $spacing-small;
+  }
+  
+  &-15 {
+    margin-right: $spacing-base;
+  }
+  
+  &-20 {
+    margin-right: $spacing-large;
+  }
+} 
