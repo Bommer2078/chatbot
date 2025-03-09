@@ -8,8 +8,6 @@ module.exports = defineConfig({
       }
     }
   },
-  publicPath: process.env.NODE_ENV === 'production'
-    ? '/chatbot/'  // 替换为您的仓库名称
-    : '/',
+  publicPath: '/',
   outputDir: 'dist'
 })

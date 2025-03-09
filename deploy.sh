@@ -16,8 +16,7 @@ git init
 git add -A
 git commit -m 'deploy'
 
-# 如果你想要部署到 https://<USERNAME>.github.io/<REPO>
-# 请将下面的 <USERNAME> 替换为您的 GitHub 用户名
-git push -f git@github.com:Bommer2078/chatbot.git master:gh-pages
+# 使用 HTTPS 方式推送到 GitHub Pages
+git push -f https://Bommer2078@github.com/Bommer2078/chatbot.git master:gh-pages
 
 cd - 
