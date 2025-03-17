@@ -3,6 +3,7 @@ import VueRouter from 'vue-router'
 import ChatHome from '../views/ChatHome.vue'
 import ChatDialog from '../views/ChatDialog.vue'
 import AIAgents from '../views/AIAgents.vue'
+import ChatHistory from '../views/ChatHistory.vue'
 
 Vue.use(VueRouter)
 
@@ -21,6 +22,11 @@ const routes = [
     path: '/agents',
     name: 'AIAgents',
     component: AIAgents
+  },
+  {
+    path: '/history',
+    name: 'ChatHistory',
+    component: ChatHistory
   }
 ]
 

@@ -12,6 +12,10 @@ Vue.config.productionTip = false
 // 创建全局事件总线
 window.EventBus = new Vue();
 
+// 在应用启动时加载聊天会话
+store.dispatch('loadChatSessions');
+store.dispatch('loadLikedMessages');
+
 new Vue({
   router,
   store,

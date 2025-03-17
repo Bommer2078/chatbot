@@ -21,12 +21,16 @@
             <div class="avatar-container">
               <img :src="message.sender === 'user' ? userAvatar : botAvatar" class="avatar-img">
             </div>
-            <div :class="['message', message.sender === 'user' ? 'user-message' : 'bot-message']">
-              <div class="message-content">{{ message.content }}</div>
-            </div>
+            <ChatMessage 
+              :message="message" 
+              :isInitiallyLiked="isMessageLiked(message.id)"
+              :isLastMessage="index === chatMessages.length - 1 && message.sender === 'ai'"
+              @like="handleLike"
+            />
           </div>
           
-          <div v-if="botTyping" class="message-wrapper bot-wrapper">
+          <!-- 只有在没有流式输出时才显示等待气泡 -->
+          <div v-if="botTyping && !isStreaming" class="message-wrapper bot-wrapper">
             <div class="avatar-container">
               <img :src="botAvatar" alt="AI头像" class="avatar-img">
             </div>
@@ -35,6 +39,19 @@
                 <span></span>
                 <span></span>
                 <span></span>
+              </div>
+            </div>
+          </div>
+          
+          <!-- AI 错误提示 -->
+          <div v-if="aiError" class="message-wrapper bot-wrapper">
+            <div class="avatar-container">
+              <img :src="botAvatar" alt="AI头像" class="avatar-img">
+            </div>
+            <div class="message bot-message error">
+              <div class="error-message">
+                <span class="error-icon">⚠️</span>
+                <span>{{ aiError }}</span>
               </div>
             </div>
           </div>
@@ -47,6 +64,7 @@
               class="message-input" 
               placeholder="请提问..."
               @keydown.enter.prevent="sendMessage"
+              :disabled="inputDisable"
             ></textarea>
             
             <div class="input-toolbar">
@@ -65,7 +83,14 @@
                 <img src="../assets/images/首页/u209.png" alt="附件" class="icon-img" title="附件">
                 <img src="../assets/images/首页/u207.png" alt="图片" class="icon-img" title="图片">
                 <img src="../assets/images/首页/u203.png" alt="语音" class="icon-img" title="语音">
-                <img src="../assets/images/首页/u205.png" alt="发送" class="icon-img" title="发送" @click="sendMessage" :class="{ 'disabled': !inputMessage.trim() }">
+                <img 
+                  src="../assets/images/首页/u205.png" 
+                  alt="发送" 
+                  class="icon-img" 
+                  title="发送" 
+                  @click="sendMessage" 
+                  :class="{ 'disabled': !inputMessage.trim() || inputDisable }"
+                >
               </div>
             </div>
           </div>
@@ -76,25 +101,27 @@
 </template>
 
 <script>
-import { mapState, mapActions, mapGetters } from 'vuex'
+import { mapState, mapActions, mapGetters, mapMutations } from 'vuex'
 import SidebarMenu from '@/components/Sidebar.vue'
+import ChatMessage from '@/components/ChatMessage.vue'
 
 export default {
   name: 'ChatDialog',
   components: {
-    SidebarMenu
+    SidebarMenu,
+    ChatMessage
   },
   data() {
     return {
       botTyping: false,
       inputMessage: '',
       inputDisable: false,
-      botAvatar: require('@/assets/images/开启会话/u844.png'), // 使用已知存在的图片
-      userAvatar: require('@/assets/images/开启会话/u846.png') // 使用已知存在的图片作为用户头像
+      userAvatar: require('@/assets/images/首页/u84.png'),
+      botAvatar: require('@/assets/images/开启会话/u854.png')
     }
   },
   computed: {
-    ...mapState(['user', 'chatHistory', 'initialMessage', 'currentTopic']),
+    ...mapState(['user', 'chatHistory', 'initialMessage', 'currentTopic', 'chatSessions', 'likedMessages', 'isAILoading', 'aiError', 'streamingMessageId']),
     ...mapGetters(['currentSession']),
     
     sessionTitle() {
@@ -103,10 +130,16 @@ export default {
     
     chatMessages() {
       return this.currentSession ? this.currentSession.messages : []
+    },
+    
+    // 判断是否有消息正在流式输出
+    isStreaming() {
+      return this.streamingMessageId !== null;
     }
   },
   methods: {
-    ...mapActions(['sendMessage', 'createNewSession']),
+    ...mapActions(['sendMessage', 'createNewSession', 'likeMessage', 'loadLikedMessages']),
+    ...mapMutations(['updateChatSession', 'updateSessionTitle']),
     
     sendMessage() {
       if (!this.inputMessage.trim() || this.inputDisable) return
@@ -117,89 +150,37 @@ export default {
       // 清空输入框
       this.inputMessage = ''
       
-      // 添加用户消息到会话
-      const userMessageObj = {
-        id: Date.now(),
-        content: userMessage,
-        sender: 'user',
-        timestamp: new Date().toISOString()
-      }
-      
-      // 直接添加到聊天历史
-      this.$store.commit('addChatMessage', userMessageObj)
-      
-      // 如果没有当前会话，创建一个新会话
-      if (!this.currentSession) {
-        this.createNewSession('AI对话')
-      }
-      
-      // 更新会话
-      if (this.currentSession) {
-        this.$store.commit('updateChatSession', {
-          sessionId: this.currentSession.id,
-          messages: [...this.currentSession.messages, userMessageObj]
-        })
-      }
-      
-      // 滚动到底部
-      this.scrollToBottom()
-      
-      // 显示机器人正在输入
-      this.botTyping = true
+      // 禁用输入框，等待回复
       this.inputDisable = true
       
-      // 模拟API调用延迟
-      setTimeout(() => {
-        // 生成机器人回复
-        const botResponse = this.generateResponse(userMessage)
+      // 检查当前会话是否是新创建的，且标题是"新对话"
+      if (this.currentSession && this.currentSession.title === '新对话' && this.currentSession.messages.length === 1) {
+        // 根据用户输入的第一条消息生成主题
+        const generateTopicFromMessage = (message) => {
+          // 如果消息太长，截取前20个字符
+          if (message.length > 20) {
+            return message.substring(0, 20) + '...';
+          }
+          return message;
+        };
         
-        // 隐藏输入指示器
-        this.botTyping = false
-        this.inputDisable = false
-        
-        // 添加机器人回复到聊天历史
-        const botMessageObj = {
-          id: Date.now() + 1,
-          content: botResponse,
-          sender: 'ai',
-          timestamp: new Date().toISOString()
-        }
-        
-        this.$store.commit('addChatMessage', botMessageObj)
-        
-        // 更新会话
-        if (this.currentSession) {
-          this.$store.commit('updateChatSession', {
-            sessionId: this.currentSession.id,
-            messages: [...this.currentSession.messages, botMessageObj]
-          })
-        }
-        
-        // 滚动到底部
-        this.scrollToBottom()
-      }, 1500)
-    },
-    
-    // 生成回复的辅助函数
-    generateResponse(message) {
-      const responses = [
-        `您好，我是您的AI助手。您询问的"${message}"问题，我可以这样回答：`,
-        `关于"${message}"，我有以下见解：`,
-        `您提到的"${message}"是一个很好的问题。根据我的理解：`,
-        `感谢您的提问"${message}"。以下是我的回答：`
-      ]
+        // 更新会话标题
+        const newTitle = generateTopicFromMessage(userMessage);
+        this.$store.commit('updateSessionTitle', {
+          sessionId: this.currentSession.id,
+          title: newTitle
+        });
+      }
       
-      const details = [
-        "AI技术正在快速发展，大语言模型如GPT系列已经能够理解和生成人类语言，辅助完成各种任务。",
-        "教育领域的AI应用正在改变传统教学方式，个性化学习、智能评估和自适应课程是主要发展方向。",
-        "云尚教育致力于将AI技术与教育深度融合，为师生提供更智能、更高效的教育解决方案。",
-        "数据显示，采用AI辅助教学的学校，学生的学习效率提升了约30%，教师的工作负担减轻了约25%。"
-      ]
-      
-      const randomResponse = responses[Math.floor(Math.random() * responses.length)]
-      const randomDetail = details[Math.floor(Math.random() * details.length)]
-      
-      return `${randomResponse}\n\n${randomDetail}\n\n您还有其他问题吗？我很乐意继续为您解答。`
+      // 调用 Vuex store 中的 sendMessage action
+      this.$store.dispatch('sendMessage', userMessage)
+        .finally(() => {
+          // 无论成功或失败，都重新启用输入框
+          this.inputDisable = false
+          
+          // 滚动到底部
+          this.scrollToBottom()
+        })
     },
     
     scrollToBottom() {
@@ -221,11 +202,9 @@ export default {
         const hasUserMessageOnly = this.currentSession.messages.length === 1 && 
                                   this.currentSession.messages[0].sender === 'user';
         
+        // 不再自动发送消息，因为首页已经调用了 sendResponse
+        // 只滚动到底部
         if (hasUserMessageOnly) {
-          // 显示机器人正在输入
-          this.botTyping = true;
-          
-          // 滚动到底部
           this.scrollToBottom();
         }
         
@@ -234,155 +213,203 @@ export default {
       
       // 如果有初始消息，发送它
       if (this.initialMessage) {
-        // 不要再次设置输入框的值，直接使用初始消息
-        const initialMsg = this.initialMessage;
-        
         // 创建一个新会话
-        this.createNewSession(this.currentTopic || 'AI对话');
+        this.createNewSession(this.currentTopic || '与AI助手的对话');
         
-        // 添加用户消息到会话
-        const userMessageObj = {
-          id: Date.now(),
-          content: initialMsg,
-          sender: 'user',
-          timestamp: new Date().toISOString()
-        };
-        
-        // 直接添加到聊天历史
-        this.$store.commit('addChatMessage', userMessageObj);
-        
-        // 更新会话
-        if (this.currentSession) {
-          this.$store.commit('updateChatSession', {
-            sessionId: this.currentSession.id,
-            messages: [...this.currentSession.messages, userMessageObj]
-          });
-        }
-        
-        // 显示机器人正在输入
-        this.botTyping = true;
-        this.inputDisable = true;
-        
-        // 模拟API调用延迟
-        setTimeout(() => {
-          // 生成机器人回复
-          const botResponse = this.generateResponse(initialMsg);
-          
-          // 隐藏输入指示器
-          this.botTyping = false;
-          this.inputDisable = false;
-          
-          // 添加机器人回复到聊天历史
-          const botMessageObj = {
-            id: Date.now() + 1,
-            content: botResponse,
-            sender: 'ai',
-            timestamp: new Date().toISOString()
-          };
-          
-          this.$store.commit('addChatMessage', botMessageObj);
-          
-          // 更新会话
-          if (this.currentSession) {
-            this.$store.commit('updateChatSession', {
-              sessionId: this.currentSession.id,
-              messages: [...this.currentSession.messages, botMessageObj]
-            });
-          }
-          
-          // 滚动到底部
-          this.scrollToBottom();
-        }, 1500);
+        // 发送初始消息
+        this.$store.dispatch('sendMessage', this.initialMessage);
       } else if (this.currentTopic) {
         // 如果有当前主题但没有初始消息，创建一个新会话
         this.createNewSession(this.currentTopic);
         
         // 添加欢迎消息
-        setTimeout(() => {
-          const welcomeMessage = `您好，${this.user.name}！我是您的${this.currentTopic}助手，可以回答您的问题、提供信息和帮助您完成各种任务。请问有什么可以帮您的？`;
-          
-          // 模拟机器人发送欢迎消息
-          this.botTyping = true;
-          setTimeout(() => {
-            this.botTyping = false;
-            // 直接添加一条AI消息
-            this.$store.commit('addChatMessage', {
-              id: Date.now(),
-              content: welcomeMessage,
-              sender: 'ai',
-              timestamp: new Date().toISOString()
-            });
-            
-            // 更新会话
-            if (this.currentSession) {
-              this.$store.commit('updateChatSession', {
-                sessionId: this.currentSession.id,
-                messages: [...this.currentSession.messages, {
-                  id: Date.now(),
-                  content: welcomeMessage,
-                  sender: 'ai',
-                  timestamp: new Date().toISOString()
-                }]
-              });
-            }
-            
-            this.scrollToBottom();
-          }, 1000);
-        }, 500);
+        const welcomeMessage = `您好，${this.user.name}！我是您的${this.currentTopic}助手，可以回答您的问题、提供信息和帮助您完成各种任务。请问有什么可以帮您的？`;
+        
+        // 直接添加一条AI消息
+        const aiMessage = {
+          id: Date.now(),
+          content: welcomeMessage,
+          sender: 'ai',
+          timestamp: new Date().toISOString()
+        };
+        
+        this.$store.commit('addChatMessage', aiMessage);
+        
+        // 更新会话
+        if (this.currentSession) {
+          this.$store.commit('updateChatSession', {
+            sessionId: this.currentSession.id,
+            messages: [...this.currentSession.messages, aiMessage]
+          });
+        }
+        
+        this.scrollToBottom();
       } else {
         // 如果没有当前会话，创建一个新会话
-        this.createNewSession('AI对话');
+        this.createNewSession('与AI助手的对话');
         
         // 添加欢迎消息
-        setTimeout(() => {
-          const welcomeMessage = `您好，${this.user.name}！我是您的AI助手，可以回答您的问题、提供信息和帮助您完成各种任务。请问有什么可以帮您的？`;
-          
-          // 模拟机器人发送欢迎消息
-          this.botTyping = true;
-          setTimeout(() => {
-            this.botTyping = false;
-            // 直接添加一条AI消息
-            this.$store.commit('addChatMessage', {
-              id: Date.now(),
-              content: welcomeMessage,
-              sender: 'ai',
-              timestamp: new Date().toISOString()
-            });
-            
-            // 更新会话
-            if (this.currentSession) {
-              this.$store.commit('updateChatSession', {
-                sessionId: this.currentSession.id,
-                messages: [...this.currentSession.messages, {
-                  id: Date.now(),
-                  content: welcomeMessage,
-                  sender: 'ai',
-                  timestamp: new Date().toISOString()
-                }]
-              });
-            }
-            
-            this.scrollToBottom();
-          }, 1000);
-        }, 500);
+        const welcomeMessage = `您好，${this.user.name}！我是您的AI助手，可以回答您的问题、提供信息和帮助您完成各种任务。请问有什么可以帮您的？`;
+        
+        // 直接添加一条AI消息
+        const aiMessage = {
+          id: Date.now(),
+          content: welcomeMessage,
+          sender: 'ai',
+          timestamp: new Date().toISOString()
+        };
+        
+        this.$store.commit('addChatMessage', aiMessage);
+        
+        // 更新会话
+        if (this.currentSession) {
+          this.$store.commit('updateChatSession', {
+            sessionId: this.currentSession.id,
+            messages: [...this.currentSession.messages, aiMessage]
+          });
+        }
+        
+        this.scrollToBottom();
       }
+    },
+    
+    handleLike({ messageId }) {
+      this.likeMessage(messageId);
+    },
+    
+    isMessageLiked(messageId) {
+      return this.likedMessages.includes(messageId);
     }
   },
   mounted() {
-    this.initChat()
-    this.scrollToBottom()
+    // 检查 URL 参数是否包含 new=true 或 session
+    const isNewChat = this.$route.query.new === 'true';
+    const sessionId = this.$route.query.session;
+    
+    if (sessionId) {
+      // 如果指定了会话 ID，加载该会话
+      const session = this.chatSessions.find(s => s.id === sessionId);
+      if (session) {
+        // 找到会话，不需要做任何操作，因为 currentSession getter 会自动获取最新的会话
+        // 但我们需要确保这个会话是当前会话（最后一个会话）
+        // 所以我们先移除它，然后重新添加
+        const sessionIndex = this.chatSessions.findIndex(s => s.id === sessionId);
+        if (sessionIndex !== -1) {
+          const sessionToMove = { ...this.chatSessions[sessionIndex] };
+          this.$store.commit('removeChatSession', sessionId);
+          this.$store.commit('addChatSession', sessionToMove);
+        }
+      } else {
+        // 没有找到会话，创建一个新会话
+        this.createNewSession('与AI助手的对话');
+      }
+    } else if (isNewChat) {
+      // 如果是新窗口打开的新对话，创建一个新会话
+      // 添加欢迎消息
+      const welcomeMessage = `您好，${this.user.name}！我是您的AI助手，可以回答您的问题、提供信息和帮助您完成各种任务。请问有什么可以帮您的？`;
+      
+      // 创建一个临时主题名称
+      const tempTitle = '新对话';
+      
+      // 创建新会话
+      this.createNewSession(tempTitle);
+      
+      // 直接添加一条AI消息
+      const aiMessage = {
+        id: Date.now(),
+        content: welcomeMessage,
+        sender: 'ai',
+        timestamp: new Date().toISOString()
+      };
+      
+      this.$store.commit('addChatMessage', aiMessage);
+      
+      // 更新会话
+      if (this.currentSession) {
+        this.$store.commit('updateChatSession', {
+          sessionId: this.currentSession.id,
+          messages: [...this.currentSession.messages, aiMessage]
+        });
+      }
+      
+      this.scrollToBottom();
+      
+      // 设置焦点到输入框，提示用户输入问题
+      this.$nextTick(() => {
+        const textarea = document.querySelector('.message-input');
+        if (textarea) {
+          textarea.focus();
+        }
+      });
+    } else {
+      // 正常初始化聊天
+      this.initChat();
+    }
+    
+    this.scrollToBottom();
     
     // 监听 AI 回复完成事件
     window.EventBus.$on('ai-response-complete', () => {
       this.botTyping = false;
     });
+    
+    // 加载已点赞的消息
+    this.loadLikedMessages();
+    
+    // 监听创建新聊天的事件
+    window.EventBus.$on('create-new-chat', () => {
+      // 添加欢迎消息
+      const welcomeMessage = `您好，${this.user.name}！我是您的AI助手，可以回答您的问题、提供信息和帮助您完成各种任务。请问有什么可以帮您的？`;
+      
+      // 创建一个临时主题名称
+      const tempTitle = '新对话';
+      
+      // 创建新会话
+      this.createNewSession(tempTitle);
+      
+      // 直接添加一条AI消息
+      const aiMessage = {
+        id: Date.now(),
+        content: welcomeMessage,
+        sender: 'ai',
+        timestamp: new Date().toISOString()
+      };
+      
+      this.$store.commit('addChatMessage', aiMessage);
+      
+      // 更新会话
+      if (this.currentSession) {
+        this.$store.commit('updateChatSession', {
+          sessionId: this.currentSession.id,
+          messages: [...this.currentSession.messages, aiMessage]
+        });
+      }
+      
+      this.scrollToBottom();
+      
+      // 设置焦点到输入框，提示用户输入问题
+      this.$nextTick(() => {
+        const textarea = document.querySelector('.message-input');
+        if (textarea) {
+          textarea.focus();
+        }
+      });
+    });
   },
   beforeDestroy() {
     // 移除事件监听
     window.EventBus.$off('ai-response-complete');
+    window.EventBus.$off('create-new-chat');
   },
   updated() {
     this.scrollToBottom()
+  },
+  watch: {
+    // 监听 AI 加载状态变化
+    isAILoading(newVal) {
+      this.botTyping = newVal;
+      this.inputDisable = newVal;
+    }
   }
 }
 </script>
@@ -476,6 +503,7 @@ export default {
   display: flex;
   margin-bottom: 16px;
   width: 100%;
+  position: relative;
 }
 
 .bot-wrapper {
@@ -483,7 +511,10 @@ export default {
 }
 
 .user-wrapper {
-  flex-direction: row-reverse;
+  
+  .chat-message-container {
+    flex-direction: row-reverse;
+  }
 }
 
 .avatar-container {
@@ -491,6 +522,8 @@ export default {
   height: 28px;
   margin: 0 8px;
   flex-shrink: 0;
+  display: flex;
+  align-items: flex-start;
 }
 
 .avatar-img {
@@ -673,5 +706,30 @@ export default {
 // 移除旧的输入框样式
 .input-container {
   display: none;
+}
+
+.error-message {
+  display: flex;
+  align-items: center;
+  color: #f56c6c;
+  padding: 10px;
+  background-color: #fef0f0;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  
+  .error-icon {
+    margin-right: 8px;
+    font-size: 16px;
+  }
+}
+
+.message-input:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.icon-img.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style> 

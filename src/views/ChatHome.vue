@@ -76,6 +76,9 @@ export default {
         if (topic !== 'AI校闻速递' && topic !== 'AI待办精灵' && topic !== 'AI课表助手' && 
             topic !== 'AI成绩大师' && topic !== '更多功能') {
           
+          // 确保聊天会话已加载
+          this.$store.dispatch('loadChatSessions');
+          
           // 创建一个新会话
           const sessionId = Date.now().toString()
           this.$store.commit('addChatSession', {

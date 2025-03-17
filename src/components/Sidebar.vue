@@ -87,7 +87,11 @@ export default {
       this.$emit('new-chat')
     },
     navigateTo(path) {
-      this.$router.push(path)
+      // 避免重复导航到当前路径
+      console.log(this.$route.path,path)  
+      if (this.$route.path !== path) {
+        this.$router.push(path)
+      }
     },
     isActive(path) {
       return this.$route.path === path
@@ -147,37 +151,26 @@ export default {
 .menu-item {
   display: flex;
   align-items: center;
-  padding: 12px 15px;
+  padding: 12px 8px;
   cursor: pointer;
   position: relative;
   color: #333;
   font-size: 14px;
   transition: all 0.2s ease;
-  margin-bottom: 6px !important;
+  margin: 0 8px 6px 8px;
+  width: calc(100% - 16px);
+  box-sizing: border-box;
+  border-radius: 8px;
 }
 
 .menu-item:hover:not(.active) {
   background-color: #f0f0f0;
-  border-radius: 8px;
-  margin: 0 8px;
-  width: 90%;
-  border: 0.5px solid rgba(0,0,0,.05);
-  box-sizing: border-box;
+
 }
 
 .menu-item.active {
   background-color: #EBEDF8;
-  border-radius: 8px;
-  margin: 0 8px;
-  padding: 12px 8px;
-  align-items: center;
-  border: 0.5px solid rgba(0,102,255,.15);
-  color: #0057ff;
-  cursor: pointer;
-  display: inline-flex;
-  justify-content: space-between;
-  padding: 8px 6px;
-  width: 90%;
+
   font-weight: 700;
 }
 
